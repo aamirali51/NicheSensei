@@ -1,30 +1,88 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResult } from "../types";
 
-// Helper to calculate outlier scores purely in JS if needed, but we'll ask AI to prep the data
-// We will ask AI to generate realistic data based on the niche/channel provided.
-
 export const analyzeNicheOrChannel = async (query: string, apiKey: string): Promise<AnalysisResult> => {
   const ai = new GoogleGenAI({ apiKey });
 
   const systemInstruction = `
-    You are an advanced YouTube Analytics Engine specialized in Faceless YouTube Channel strategy.
-    Your goal is to simulate a deep-dive analysis of a specific YouTube channel or Niche.
-    
-    If the user input is a generic niche (e.g., "True Crime"), invent a representative "market leader" channel profile for that niche and analyze it.
-    If the user input is a specific channel name (e.g., "Bright Side"), generate realistic estimated data for that channel.
+    You are an advanced YouTube Research & Analytics Engine.
+    Your job is to analyze channels, videos, niches, markets, and global content trends to help new creators find the highest-success micro-niches with the least competition.
+    You must produce extremely detailed, structured, data-backed insights and actionable recommendations.
+    You must always prioritize beginner success, global faceless content, and high-RPM niches.
 
-    Key Metric Definitions:
-    - Outlier Score: Video Views / Channel Average Views.
-    - Shadow Analysis: Detect if other channels copied successful videos.
-    - Sub-Niche: Specific topic clusters within the main niche.
+    🎯 MAIN OBJECTIVES
 
-    Return PURE JSON data.
+    When the user enters ANYTHING (channel URL, video URL, keyword, or niche), perform:
+
+    1. Outlier Video Detection (vidIQ-style)
+    Use deep statistical analysis:
+    Compute channel median views
+    Compute z-score for each video
+    Label videos:
+    Outlier++ = z-score ≥ +2
+    Outlier+ = z-score between +1 and +2
+    Underperformer = z-score ≤ –1
+    Separate detection for Shorts vs Long-form
+    Include:
+    Views-per-hour (VPH)
+    7-day growth slope
+
+    2. Sub-Niche Discovery (AI Clustering)
+    Return micro-niches with:
+    Demand score
+    Competition score
+    Creator dominance ratio
+    Monetization class (Low/Med/High RPM)
+
+    3. Beginner-Friendly Opportunity Finder
+    Score each micro-niche:
+    Beginner Opportunity Score (0–100)
+    Saturation Level (Low/Med/High)
+    Barrier to Entry (Low/Medium/High)
+    Success Probability for New Channel (%)
+
+    4. Copy & Shadow Detection (Competitor Behavior)
+    For any successful video:
+    Identify similar videos posted within ±30 days
+    Evaluate: Did the copies succeed or fail?
+
+    5. High-RPM Monetization Mapping
+    Classify each niche/sub-niche based on advertiser behavior.
+
+    6. Keyword & Content Opportunity Engine
+    For every niche/sub-niche:
+    Generate long-tail YouTube keyword opportunities
+    Provide a 10-video starter roadmap with:
+    Title
+    Hook idea
+    Retention structure
+    CTA strategy
+
+    7. Channel Audit (Full Breakdown)
+    If user inputs a channel URL/Name, deliver:
+    What the channel is doing right/wrong
+    Which videos are carrying the channel
+    Which videos drag performance
+    Expansion opportunities
+
+    8. Faceless Content Optimization
+    Always optimize for:
+    Faceless narration, Stock footage, AI voice
+
+    9. Success Probability Enhancer
+    Output:
+    Success probability (%) for a new small channel
+    Global RPM potential
+
+    RETURN PURE JSON.
   `;
 
   const schema = {
     type: Type.OBJECT,
     properties: {
+      summary: { type: Type.STRING },
+      beginnerOpportunityScore: { type: Type.NUMBER, description: "0-100 score for a beginner entering this niche" },
+      successProbability: { type: Type.NUMBER, description: "0-100 probability of success" },
       channelProfile: {
         type: Type.OBJECT,
         properties: {
@@ -36,6 +94,15 @@ export const analyzeNicheOrChannel = async (query: string, apiKey: string): Prom
           dominantSubNiche: { type: Type.STRING },
         },
         required: ["name", "avgViews", "medianViews"],
+      },
+      channelAudit: {
+        type: Type.OBJECT,
+        properties: {
+          strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+          weaknesses: { type: Type.ARRAY, items: { type: Type.STRING } },
+          expansionOpportunities: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+        required: ["strengths", "weaknesses", "expansionOpportunities"],
       },
       videos: {
         type: Type.ARRAY,
@@ -51,9 +118,11 @@ export const analyzeNicheOrChannel = async (query: string, apiKey: string): Prom
             comments: { type: Type.NUMBER },
             duration: { type: Type.STRING },
             type: { type: Type.STRING, enum: ["Long", "Short"] },
-            growthVelocity: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
+            zScore: { type: Type.NUMBER },
+            viewsPerHour: { type: Type.NUMBER },
+            performanceLabel: { type: Type.STRING, enum: ["Outlier++", "Outlier+", "Standard", "Underperformer"] },
           },
-          required: ["title", "views", "uploadDate", "type"],
+          required: ["title", "views", "zScore", "performanceLabel"],
         },
       },
       competitors: {
@@ -83,32 +152,34 @@ export const analyzeNicheOrChannel = async (query: string, apiKey: string): Prom
           required: ["copycatChannel", "performanceStatus"],
         },
       },
-      subNiches: {
+      microNiches: {
         type: Type.ARRAY,
         items: {
           type: Type.OBJECT,
           properties: {
             name: { type: Type.STRING },
-            competitionLevel: { type: Type.STRING, enum: ["Low", "Medium", "High"] },
-            demandLevel: { type: Type.STRING, enum: ["Low", "Medium", "High"] },
-            rpmEstimate: { type: Type.STRING },
+            demandScore: { type: Type.NUMBER },
+            competitionScore: { type: Type.NUMBER },
+            monetizationClass: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
+            saturationLevel: { type: Type.STRING, enum: ["Low", "Medium", "High"] },
             successProbability: { type: Type.NUMBER },
-            recommendedTopics: { type: Type.ARRAY, items: { type: Type.STRING } },
+            barrierToEntry: { type: Type.STRING, enum: ["Low", "Medium", "High"] },
+            keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
           },
-          required: ["name", "successProbability", "rpmEstimate"],
+          required: ["name", "successProbability", "monetizationClass"],
         },
       },
-      contentStrategy: {
+      contentRoadmap: {
         type: Type.ARRAY,
         items: {
           type: Type.OBJECT,
           properties: {
             title: { type: Type.STRING },
-            format: { type: Type.STRING },
-            facelessTechnique: { type: Type.STRING },
             hook: { type: Type.STRING },
+            structure: { type: Type.STRING },
+            ctaStrategy: { type: Type.STRING },
           },
-          required: ["title", "facelessTechnique"],
+          required: ["title", "hook"],
         },
       },
       globalMonetization: {
@@ -117,22 +188,32 @@ export const analyzeNicheOrChannel = async (query: string, apiKey: string): Prom
           topRegions: { type: Type.ARRAY, items: { type: Type.STRING } },
           avgRPM: { type: Type.STRING },
         },
-        required: ["avgRPM"],
+        required: ["avgRPM", "topRegions"],
       },
     },
-    required: ["channelProfile", "videos", "competitors", "subNiches", "contentStrategy", "globalMonetization"],
+    required: [
+      "summary", 
+      "beginnerOpportunityScore", 
+      "successProbability", 
+      "channelProfile", 
+      "videos", 
+      "microNiches", 
+      "contentRoadmap",
+      "competitors",
+      "shadowAnalysis",
+      "globalMonetization"
+    ],
   };
 
   const prompt = `
     Analyze the niche/channel: "${query}".
     
-    1. Generate 20 recent videos. Make sure to include 3-4 "Outlier" videos with significantly higher views (3x-10x average) to demonstrate viral hits.
-    2. Suggest 3-5 profitable sub-niches for a beginner.
-    3. Identify 3 similar channels.
-    4. Create 3 examples of "Shadow Analysis" where a competitor copied a video.
-    5. Suggest 5 faceless video ideas.
+    1. Generate 20 recent videos. 
+    2. Identify Micro-Niche Clusters.
+    3. Calculate scores (Z-Score, Opportunity Score, etc) based on a simulated market analysis.
+    4. Provide a 10-video roadmap for a beginner.
     
-    Use realistic metrics for the Niche.
+    Ensure the data reflects a realistic scenario for "${query}".
   `;
 
   try {
@@ -143,7 +224,7 @@ export const analyzeNicheOrChannel = async (query: string, apiKey: string): Prom
         responseMimeType: "application/json",
         responseSchema: schema,
         systemInstruction: systemInstruction,
-        temperature: 0.7, // Slightly creative to generate realistic variations
+        temperature: 0.7, 
       },
     });
 
@@ -152,13 +233,25 @@ export const analyzeNicheOrChannel = async (query: string, apiKey: string): Prom
     
     const data = JSON.parse(text) as AnalysisResult;
     
-    // Post-processing: Calculate Outlier Scores client-side to ensure mathematical accuracy
-    // and assign valid thumbnail placeholders if missing
+    // Post-processing Safety Checks
+    // Ensure all arrays are initialized to avoid "undefined.map" errors
+    data.videos = Array.isArray(data.videos) ? data.videos : [];
+    data.microNiches = Array.isArray(data.microNiches) ? data.microNiches : [];
+    data.competitors = Array.isArray(data.competitors) ? data.competitors : [];
+    data.shadowAnalysis = Array.isArray(data.shadowAnalysis) ? data.shadowAnalysis : [];
+    data.contentRoadmap = Array.isArray(data.contentRoadmap) ? data.contentRoadmap : [];
+    
+    if (data.channelAudit) {
+        data.channelAudit.strengths = Array.isArray(data.channelAudit.strengths) ? data.channelAudit.strengths : [];
+        data.channelAudit.weaknesses = Array.isArray(data.channelAudit.weaknesses) ? data.channelAudit.weaknesses : [];
+        data.channelAudit.expansionOpportunities = Array.isArray(data.channelAudit.expansionOpportunities) ? data.channelAudit.expansionOpportunities : [];
+    }
+
+    // Process videos
     data.videos = data.videos.map((v, index) => ({
         ...v,
-        outlierScore: parseFloat((v.views / data.channelProfile.avgViews).toFixed(2)),
-        // Assign a random realistic image based on index to keep it consistent
-        thumbnailUrl: `https://picsum.photos/seed/${v.id || index}/320/180`,
+        // Ensure image is set
+        thumbnailUrl: `https://picsum.photos/seed/${v.id || index + 'v'}/320/180`,
         id: v.id || `vid-${index}`
     }));
 

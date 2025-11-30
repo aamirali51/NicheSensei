@@ -41,7 +41,7 @@ function App() {
     }
   };
 
-  const ExampleQueries = ["True Crime", "Meditation Music", "Tech Reviews", "MrBeast"];
+  const ExampleQueries = ["True Crime Faceless", "AI News", "Stoicism", "Finance Automation"];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 selection:bg-purple-500 selection:text-white">
@@ -68,10 +68,10 @@ function App() {
         {/* Search Section */}
         <div className="max-w-2xl mx-auto mb-12 text-center">
           <h1 className="text-3xl md:text-5xl font-bold text-white mb-6">
-            Find Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">Viral Niche</span>
+            Advanced <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">Channel & Niche</span> Analysis
           </h1>
           <p className="text-slate-400 mb-8 text-lg">
-            Analyze any channel or keyword to uncover hidden opportunities, outliers, and monetization strategies.
+            Uncover outliers, micro-niches, and copycat gaps with AI-powered deep stats.
           </p>
 
           <form onSubmit={handleSearch} className="relative group">
@@ -82,7 +82,7 @@ function App() {
                 type="text" 
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Enter a Channel Name (e.g. MagnatesMedia) or Niche (e.g. Stoicism)"
+                placeholder="Analyze a Niche (e.g. 'Dark History') or Channel..."
                 className="bg-transparent border-none outline-none flex-1 px-4 py-3 text-white placeholder-slate-500"
               />
               <button 
@@ -90,7 +90,7 @@ function App() {
                 disabled={status === 'analyzing'}
                 className="bg-white text-slate-900 px-6 py-3 rounded-full font-bold hover:bg-slate-200 transition-colors disabled:opacity-50"
               >
-                {status === 'analyzing' ? 'Analyzing...' : 'Analyze'}
+                {status === 'analyzing' ? 'Scanning...' : 'Analyze'}
               </button>
             </div>
           </form>
@@ -113,7 +113,7 @@ function App() {
         {status === 'analyzing' && (
           <div className="flex flex-col items-center justify-center py-20 animate-pulse">
             <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-slate-400">AI is crunching YouTube data & strategies...</p>
+            <p className="text-slate-400">Calculating Z-Scores, Clusters & Monetization...</p>
           </div>
         )}
 
@@ -130,26 +130,75 @@ function App() {
         {status === 'success' && data && (
           <div className="animate-fade-in space-y-8">
             
-            {/* Stats Header */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <p className="text-slate-500 text-xs uppercase font-bold mb-1">Target</p>
-                <h2 className="text-2xl font-bold text-white truncate">{data.channelProfile.name}</h2>
-                <p className="text-emerald-400 text-sm">{data.channelProfile.subscriberCount} Subs</p>
-              </div>
-              <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <p className="text-slate-500 text-xs uppercase font-bold mb-1">Average Views</p>
-                <h2 className="text-2xl font-bold text-white">{data.channelProfile.avgViews.toLocaleString()}</h2>
-              </div>
-              <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <p className="text-slate-500 text-xs uppercase font-bold mb-1">Potential RPM</p>
-                <h2 className="text-2xl font-bold text-blue-400">{data.globalMonetization.avgRPM}</h2>
-              </div>
-              <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <p className="text-slate-500 text-xs uppercase font-bold mb-1">Top Region</p>
-                <h2 className="text-2xl font-bold text-white">{data.globalMonetization.topRegions[0]}</h2>
-              </div>
+            {/* Summary & High-Level Scores */}
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-2xl border border-slate-700 relative overflow-hidden">
+               <div className="absolute top-0 right-0 p-4 opacity-10">
+                 <IconTrendingUp className="w-32 h-32 text-white" />
+               </div>
+               <h2 className="text-xl font-bold text-white mb-2">Analysis Summary</h2>
+               <p className="text-slate-300 max-w-3xl mb-6 leading-relaxed">{data.summary}</p>
+               
+               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-700/50">
+                    <div className="text-slate-500 text-xs font-bold uppercase mb-1">Beginner Opportunity</div>
+                    <div className={`text-3xl font-bold ${data.beginnerOpportunityScore > 70 ? 'text-green-400' : 'text-yellow-400'}`}>
+                      {data.beginnerOpportunityScore}/100
+                    </div>
+                  </div>
+                  <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-700/50">
+                    <div className="text-slate-500 text-xs font-bold uppercase mb-1">Success Probability</div>
+                    <div className={`text-3xl font-bold ${data.successProbability > 70 ? 'text-green-400' : 'text-yellow-400'}`}>
+                      {data.successProbability}%
+                    </div>
+                  </div>
+                  <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-700/50">
+                    <div className="text-slate-500 text-xs font-bold uppercase mb-1">Global RPM Est.</div>
+                    <div className="text-3xl font-bold text-blue-400">{data.globalMonetization?.avgRPM || 'N/A'}</div>
+                  </div>
+                  <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-700/50">
+                    <div className="text-slate-500 text-xs font-bold uppercase mb-1">Top Market</div>
+                    <div className="text-xl font-bold text-white truncate">
+                      {data.globalMonetization?.topRegions?.[0] || 'Global'}
+                    </div>
+                  </div>
+               </div>
             </div>
+
+            {/* Channel Audit (Conditional) */}
+            {data.channelAudit && (
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <div className="bg-slate-800 p-5 rounded-xl border border-green-900/50">
+                   <h3 className="font-bold text-green-400 mb-3 uppercase text-sm tracking-wider">Strengths</h3>
+                   <ul className="space-y-2">
+                     {data.channelAudit.strengths?.map((s, i) => (
+                       <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                         <span className="text-green-500 mt-1">✓</span> {s}
+                       </li>
+                     )) || <li className="text-sm text-slate-500">No data available</li>}
+                   </ul>
+                 </div>
+                 <div className="bg-slate-800 p-5 rounded-xl border border-red-900/50">
+                   <h3 className="font-bold text-red-400 mb-3 uppercase text-sm tracking-wider">Weaknesses</h3>
+                   <ul className="space-y-2">
+                     {data.channelAudit.weaknesses?.map((w, i) => (
+                       <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                         <span className="text-red-500 mt-1">✗</span> {w}
+                       </li>
+                     )) || <li className="text-sm text-slate-500">No data available</li>}
+                   </ul>
+                 </div>
+                 <div className="bg-slate-800 p-5 rounded-xl border border-blue-900/50">
+                   <h3 className="font-bold text-blue-400 mb-3 uppercase text-sm tracking-wider">Expansion Opps</h3>
+                   <ul className="space-y-2">
+                     {data.channelAudit.expansionOpportunities?.map((o, i) => (
+                       <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                         <span className="text-blue-500 mt-1">➜</span> {o}
+                       </li>
+                     )) || <li className="text-sm text-slate-500">No data available</li>}
+                   </ul>
+                 </div>
+               </div>
+            )}
 
             {/* Navigation Tabs */}
             <div className="flex border-b border-slate-800">
@@ -157,30 +206,30 @@ function App() {
                 onClick={() => setActiveTab('overview')}
                 className={`px-6 py-4 font-medium text-sm transition-colors border-b-2 ${activeTab === 'overview' ? 'border-purple-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
               >
-                Videos & Outliers
+                Deep Stats & Outliers
               </button>
               <button 
                 onClick={() => setActiveTab('strategy')}
                 className={`px-6 py-4 font-medium text-sm transition-colors border-b-2 ${activeTab === 'strategy' ? 'border-purple-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
               >
-                Strategy & Niches
+                Micro-Niches & Roadmap
               </button>
               <button 
                 onClick={() => setActiveTab('competitors')}
                 className={`px-6 py-4 font-medium text-sm transition-colors border-b-2 ${activeTab === 'competitors' ? 'border-purple-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
               >
-                Competitor Intelligence
+                Competitor & Copy Analysis
               </button>
             </div>
 
             {/* Tab Content */}
             <div className="min-h-[500px]">
               {activeTab === 'overview' && (
-                <VideoAnalysis videos={data.videos} avgViews={data.channelProfile.avgViews} />
+                <VideoAnalysis videos={data.videos || []} avgViews={data.channelProfile?.avgViews || 0} />
               )}
 
               {activeTab === 'strategy' && (
-                <StrategyPanel subNiches={data.subNiches} strategies={data.contentStrategy} />
+                <StrategyPanel microNiches={data.microNiches || []} roadmap={data.contentRoadmap || []} />
               )}
 
               {activeTab === 'competitors' && (
@@ -191,7 +240,7 @@ function App() {
                       Similar Channels
                     </h3>
                     <div className="space-y-4">
-                      {data.competitors.map((comp, i) => (
+                      {data.competitors?.length ? data.competitors.map((comp, i) => (
                         <div key={i} className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex items-start justify-between">
                           <div>
                             <h4 className="font-bold text-white">{comp.name}</h4>
@@ -203,7 +252,7 @@ function App() {
                             <span className="text-xs text-slate-500 uppercase">Match</span>
                           </div>
                         </div>
-                      ))}
+                      )) : <p className="text-slate-500 italic">No similar channels detected.</p>}
                     </div>
                   </div>
                   
@@ -213,7 +262,7 @@ function App() {
                       Shadow Analysis (Copycats)
                     </h3>
                     <div className="space-y-4">
-                      {data.shadowAnalysis.map((shadow, i) => (
+                      {data.shadowAnalysis?.length ? data.shadowAnalysis.map((shadow, i) => (
                         <div key={i} className="bg-slate-800 p-4 rounded-xl border border-slate-700">
                           <div className="flex items-center gap-2 mb-2">
                             <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
@@ -233,7 +282,7 @@ function App() {
                             </p>
                           </div>
                         </div>
-                      ))}
+                      )) : <p className="text-slate-500 italic">No shadow analysis data available.</p>}
                     </div>
                   </div>
                 </div>

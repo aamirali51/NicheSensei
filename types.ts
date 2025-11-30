@@ -1,3 +1,4 @@
+
 export interface Video {
   id: string;
   title: string;
@@ -8,8 +9,9 @@ export interface Video {
   comments: number;
   duration: string; // e.g., "10:05"
   type: 'Long' | 'Short';
-  outlierScore?: number; // Calculated on frontend or by AI
-  growthVelocity?: 'High' | 'Medium' | 'Low';
+  zScore: number;
+  viewsPerHour: number;
+  performanceLabel: 'Outlier++' | 'Outlier+' | 'Standard' | 'Underperformer';
 }
 
 export interface ChannelProfile {
@@ -19,6 +21,17 @@ export interface ChannelProfile {
   medianViews: number;
   engagementRate: string;
   dominantSubNiche: string;
+}
+
+export interface MicroNiche {
+  name: string;
+  demandScore: number; // 0-100
+  competitionScore: number; // 0-100
+  monetizationClass: 'High' | 'Medium' | 'Low';
+  saturationLevel: 'Low' | 'Medium' | 'High';
+  successProbability: number;
+  barrierToEntry: 'Low' | 'Medium' | 'High';
+  keywords: string[];
 }
 
 export interface Competitor {
@@ -36,29 +49,30 @@ export interface ShadowVideo {
   similarityReason: string;
 }
 
-export interface SubNicheOpportunity {
-  name: string;
-  competitionLevel: 'Low' | 'Medium' | 'High';
-  demandLevel: 'Low' | 'Medium' | 'High';
-  rpmEstimate: string;
-  successProbability: number; // 0-100
-  recommendedTopics: string[];
+export interface RoadmapItem {
+  title: string;
+  hook: string;
+  structure: string;
+  ctaStrategy: string;
 }
 
-export interface ContentStrategy {
-  title: string;
-  format: string; // e.g., "Top 10 List", "Documentary"
-  facelessTechnique: string; // e.g., "Stock footage + AI Voice"
-  hook: string;
+export interface ChannelAudit {
+  strengths: string[];
+  weaknesses: string[];
+  expansionOpportunities: string[];
 }
 
 export interface AnalysisResult {
+  summary: string;
   channelProfile: ChannelProfile;
   videos: Video[];
+  microNiches: MicroNiche[];
   competitors: Competitor[];
   shadowAnalysis: ShadowVideo[];
-  subNiches: SubNicheOpportunity[];
-  contentStrategy: ContentStrategy[];
+  contentRoadmap: RoadmapItem[];
+  beginnerOpportunityScore: number; // 0-100
+  successProbability: number; // 0-100
+  channelAudit?: ChannelAudit;
   globalMonetization: {
     topRegions: string[];
     avgRPM: string;

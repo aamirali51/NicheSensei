@@ -1,23 +1,36 @@
+
 import React, { useState, useEffect } from 'react';
-import { analyzeNicheOrChannel } from './services/geminiService';
-import { AnalysisResult, LoadingState } from './types';
+import { analyzeNicheOrChannel, analyzeVideoDeepDive, analyzeChannelDeepDive } from './services/geminiService';
+import { getChannelIdFromUrl, fetchRealChannelData } from './services/youtubeService';
+import { AnalysisResult, LoadingState, DeepVideoReport, ChannelDrillDown, RealChannelData } from './types';
 import { VideoAnalysis } from './components/VideoAnalysis';
 import { StrategyPanel } from './components/StrategyPanel';
+import { ForensicsModal } from './components/ForensicsModal';
+import { ChannelDrillDownPanel } from './components/ChannelDrillDown';
+import { LoadingOverlay } from './components/LoadingOverlay';
 import { IconSearch, IconTrendingUp, IconUsers, IconSettings } from './components/Icons';
 
 function App() {
   const [query, setQuery] = useState('');
   const [data, setData] = useState<AnalysisResult | null>(null);
   const [status, setStatus] = useState<LoadingState>('idle');
+  const [loadingType, setLoadingType] = useState<'general' | 'video' | 'channel'>('general');
   const [apiKey, setApiKey] = useState('');
+  const [youtubeApiKey, setYoutubeApiKey] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'competitors' | 'strategy'>('overview');
+  
+  // Advanced State
+  const [videoReport, setVideoReport] = useState<DeepVideoReport | null>(null);
+  const [channelDeepDive, setChannelDeepDive] = useState<ChannelDrillDown | null>(null);
+  const [deepDiveLoading, setDeepDiveLoading] = useState(false);
 
   // Auto-load API Key if available in env (for dev)
   useEffect(() => {
     if (process.env.API_KEY) {
       setApiKey(process.env.API_KEY);
     }
+    // Note: Usually we don't put YouTube keys in process.env for client-side demo unless explicit
   }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -30,29 +43,71 @@ function App() {
 
     setStatus('analyzing');
     setData(null);
+    setVideoReport(null);
+    setChannelDeepDive(null);
+
+    // Determine loading type based on query
+    const isVideoUrl = query.includes('youtube.com/watch') || query.includes('youtu.be');
+    setLoadingType(isVideoUrl ? 'video' : 'general');
 
     try {
-      const result = await analyzeNicheOrChannel(query, apiKey);
-      setData(result);
-      setStatus('success');
+      if (isVideoUrl) {
+        const report = await analyzeVideoDeepDive(query, apiKey);
+        setVideoReport(report);
+        setStatus('success');
+      } else {
+        // HYBRID SEARCH LOGIC
+        let realChannelData: RealChannelData | undefined;
+
+        // Try to fetch REAL data if Youtube API Key is present AND it looks like a channel/user query
+        // (Not applicable for generic niche keywords like "finance")
+        if (youtubeApiKey && (query.includes('youtube.com') || query.startsWith('@') || query.length > 20)) {
+           try {
+             const channelId = await getChannelIdFromUrl(query, youtubeApiKey);
+             if (channelId) {
+               realChannelData = await fetchRealChannelData(channelId, youtubeApiKey);
+             }
+           } catch (ytError) {
+             console.warn("YouTube API Fetch failed, falling back to simulation:", ytError);
+             // We don't block the app, we just fall back to AI simulation
+           }
+        }
+
+        const result = await analyzeNicheOrChannel(query, apiKey, realChannelData);
+        setData(result);
+        setStatus('success');
+      }
     } catch (error) {
       console.error(error);
       setStatus('error');
     }
   };
 
+  const handleChannelClick = async (channelName: string) => {
+     if (!apiKey) return;
+     setDeepDiveLoading(true);
+     try {
+       const result = await analyzeChannelDeepDive(channelName, apiKey);
+       setChannelDeepDive(result);
+     } catch (err) {
+       console.error(err);
+     } finally {
+       setDeepDiveLoading(false);
+     }
+  };
+
   const ExampleQueries = ["True Crime Faceless", "AI News", "Stoicism", "Finance Automation"];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 selection:bg-purple-500 selection:text-white">
+    <div className="min-h-screen bg-slate-950 text-slate-200 selection:bg-purple-500 selection:text-white overflow-x-hidden">
       {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-lg flex items-center justify-center font-bold text-white">
-              F
+          <div className="flex items-center gap-2" onClick={() => { setData(null); setVideoReport(null); setQuery(''); }} style={{cursor: 'pointer'}}>
+            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-purple-500/20">
+              N
             </div>
-            <span className="font-bold text-xl tracking-tight text-white">Faceless<span className="text-purple-400">Tube</span></span>
+            <span className="font-bold text-xl tracking-tight text-white">Niche<span className="text-purple-400">Sensei</span></span>
           </div>
           <button 
             onClick={() => setShowSettings(true)}
@@ -63,15 +118,15 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-8 relative">
         
         {/* Search Section */}
         <div className="max-w-2xl mx-auto mb-12 text-center">
           <h1 className="text-3xl md:text-5xl font-bold text-white mb-6">
-            Advanced <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">Channel & Niche</span> Analysis
+            Master the Algorithm with <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">NicheSensei</span>
           </h1>
           <p className="text-slate-400 mb-8 text-lg">
-            Uncover outliers, micro-niches, and copycat gaps with AI-powered deep stats.
+            The AI engine for deep forensic analysis, competitor mapping, and high-probability niche discovery.
           </p>
 
           <form onSubmit={handleSearch} className="relative group">
@@ -82,7 +137,7 @@ function App() {
                 type="text" 
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Analyze a Niche (e.g. 'Dark History') or Channel..."
+                placeholder="Paste Channel, Video, or Niche..."
                 className="bg-transparent border-none outline-none flex-1 px-4 py-3 text-white placeholder-slate-500"
               />
               <button 
@@ -96,7 +151,7 @@ function App() {
           </form>
           
           <div className="mt-4 flex flex-wrap justify-center gap-2">
-            <span className="text-slate-500 text-sm">Try:</span>
+            <span className="text-slate-500 text-sm">Ask Sensei:</span>
             {ExampleQueries.map(q => (
               <button 
                 key={q} 
@@ -111,23 +166,20 @@ function App() {
 
         {/* Loading State */}
         {status === 'analyzing' && (
-          <div className="flex flex-col items-center justify-center py-20 animate-pulse">
-            <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-slate-400">Calculating Z-Scores, Clusters & Monetization...</p>
-          </div>
+          <LoadingOverlay type={loadingType} />
         )}
 
         {/* Error State */}
         {status === 'error' && (
           <div className="text-center py-20">
             <p className="text-red-400 bg-red-900/20 inline-block px-4 py-2 rounded-lg border border-red-900">
-              Analysis failed. Please check your API Key and try again.
+              Sensei encountered an error. Please check your API Keys and try again.
             </p>
           </div>
         )}
 
-        {/* Dashboard */}
-        {status === 'success' && data && (
+        {/* MAIN DASHBOARD */}
+        {status === 'success' && data && !videoReport && (
           <div className="animate-fade-in space-y-8">
             
             {/* Summary & High-Level Scores */}
@@ -135,7 +187,7 @@ function App() {
                <div className="absolute top-0 right-0 p-4 opacity-10">
                  <IconTrendingUp className="w-32 h-32 text-white" />
                </div>
-               <h2 className="text-xl font-bold text-white mb-2">Analysis Summary</h2>
+               <h2 className="text-xl font-bold text-white mb-2">Sensei's Verdict</h2>
                <p className="text-slate-300 max-w-3xl mb-6 leading-relaxed">{data.summary}</p>
                
                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -237,13 +289,17 @@ function App() {
                   <div className="space-y-4">
                     <h3 className="text-xl font-semibold text-white flex items-center gap-2">
                       <IconUsers className="w-6 h-6 text-slate-400" />
-                      Similar Channels
+                      Similar Channels (Click for Deep Dive)
                     </h3>
                     <div className="space-y-4">
                       {data.competitors?.length ? data.competitors.map((comp, i) => (
-                        <div key={i} className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex items-start justify-between">
+                        <div 
+                           key={i} 
+                           onClick={() => handleChannelClick(comp.name)}
+                           className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex items-start justify-between cursor-pointer hover:border-purple-500 hover:shadow-lg hover:shadow-purple-500/10 transition-all group"
+                        >
                           <div>
-                            <h4 className="font-bold text-white">{comp.name}</h4>
+                            <h4 className="font-bold text-white group-hover:text-purple-400 transition-colors">{comp.name}</h4>
                             <p className="text-sm text-slate-400">{comp.subscribers} Subscribers</p>
                             <p className="text-xs text-slate-500 mt-2">{comp.notes}</p>
                           </div>
@@ -273,7 +329,7 @@ function App() {
                             </span>
                           </div>
                           <p className="text-sm text-slate-300">
-                            Channel <span className="font-bold text-white">{shadow.copycatChannel}</span> copied the concept with:
+                            Channel <span className="font-bold text-white cursor-pointer hover:text-blue-400 hover:underline" onClick={() => handleChannelClick(shadow.copycatChannel)}>{shadow.copycatChannel}</span> copied the concept with:
                           </p>
                           <p className="text-white font-medium italic mt-1">"{shadow.copycatTitle}"</p>
                           <div className="mt-3 pt-3 border-t border-slate-700/50">
@@ -293,21 +349,54 @@ function App() {
         )}
       </main>
 
+      {/* MODALS AND PANELS */}
+
+      {/* Video Forensics Modal */}
+      {videoReport && (
+        <ForensicsModal report={videoReport} onClose={() => setVideoReport(null)} />
+      )}
+
+      {/* Channel Deep Dive Panel */}
+      {channelDeepDive && (
+        <ChannelDrillDownPanel data={channelDeepDive} onClose={() => setChannelDeepDive(null)} />
+      )}
+
+      {/* Deep Dive Loading Overlay */}
+      {deepDiveLoading && (
+        <LoadingOverlay type='channel' />
+      )}
+
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-full max-w-md shadow-2xl">
             <h2 className="text-2xl font-bold text-white mb-2">Configuration</h2>
-            <p className="text-slate-400 mb-6 text-sm">To enable the AI analysis engine, please provide a Gemini API Key.</p>
+            <p className="text-slate-400 mb-6 text-sm">To enable NicheSensei's analysis engine, please provide your API Keys.</p>
             
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Google Gemini API Key</label>
-            <input 
-              type="password" 
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-3 mb-6 focus:ring-2 focus:ring-purple-500 outline-none"
-              placeholder="AIzaSy..."
-            />
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Google Gemini API Key (Required)</label>
+                <input 
+                  type="password" 
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 outline-none"
+                  placeholder="AIzaSy..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">YouTube Data API Key (Optional)</label>
+                <p className="text-[10px] text-slate-500 mb-2">Provide this to fetch verified real-time statistics instead of AI simulations.</p>
+                <input 
+                  type="password" 
+                  value={youtubeApiKey}
+                  onChange={(e) => setYoutubeApiKey(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none"
+                  placeholder="AIzaSy..."
+                />
+              </div>
+            </div>
             
             <div className="flex gap-4">
               <button 
@@ -323,12 +412,9 @@ function App() {
                 className="flex-1 bg-purple-600 text-white font-bold py-3 rounded-lg hover:bg-purple-500 transition-colors disabled:opacity-50"
                 disabled={!apiKey}
               >
-                Save Key
+                Save Keys
               </button>
             </div>
-            <p className="mt-4 text-xs text-center text-slate-600">
-              The key is stored only in your browser's memory.
-            </p>
           </div>
         </div>
       )}

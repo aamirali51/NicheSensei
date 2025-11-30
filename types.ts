@@ -25,12 +25,16 @@ export interface ChannelProfile {
 
 export interface MicroNiche {
   name: string;
+  subNiches: string[];
   demandScore: number; // 0-100
   competitionScore: number; // 0-100
   monetizationClass: 'High' | 'Medium' | 'Low';
   saturationLevel: 'Low' | 'Medium' | 'High';
   successProbability: number;
   barrierToEntry: 'Low' | 'Medium' | 'High';
+  dominanceRatio: number; // 0-1 (percentage of top results owned by big channels)
+  whyItWorks: string;
+  sampleIdeas: string[]; // List of 10 video titles/concepts
   keywords: string[];
 }
 
@@ -77,6 +81,85 @@ export interface AnalysisResult {
     topRegions: string[];
     avgRPM: string;
   };
+}
+
+// --- NEW TYPES FOR ADVANCED FEATURES ---
+
+export interface CopyEvent {
+  sourceVideoId: string;
+  sourceChannelName: string;
+  copyVideoId: string;
+  copyChannelName: string;
+  titleSimilarity: number;
+  transcriptSimilarity: number;
+  thumbnailSimilarity: number;
+  audioSimilarity: number;
+  compositeCopyScore: number;
+  timeDiffHours: number;
+  copyOutcome: 'Success' | 'Fail';
+  copyType: 'Direct' | 'Derivative' | 'Format-Reuse' | 'Thumbnail-Mimic';
+}
+
+export interface DeepVideoReport {
+  videoId: string;
+  videoTitle: string;
+  originalityStatus: 'Original' | 'Likely Original' | 'Derivative' | 'Likely Copy' | 'Unclear/Concurrent';
+  originalityConfidencePct: number;
+  topMatches: {
+    sourceVideoId: string;
+    sourceChannelName: string;
+    compositeCopyScore: number;
+    timeDiffHours: number;
+    copyType: string;
+  }[];
+  transcriptSimilarity: number;
+  titleSimilarity: number;
+  thumbnailSimilarity: number;
+  audioSimilarity: number;
+  microNiche: {
+    label: string;
+    beginnerOpportunityScore: number;
+  };
+  roadmap: RoadmapItem[];
+  improvementSuggestions: string[];
+}
+
+export interface ChannelDrillDown {
+  channelId: string;
+  channelName: string;
+  subscriberCount: string;
+  copyBehaviorScore: number; // 0-100
+  originatorScore: number; // 0-100
+  outliers: Video[];
+  copyEvents: CopyEvent[];
+  recommendedMicroNiches: MicroNiche[];
+  shadowMapData: {
+      nodes: { id: string; label: string; type: 'Source' | 'Copy'; date: string }[];
+      edges: { from: string; to: string; weight: number }[];
+  };
+}
+
+// --- REAL DATA TYPES ---
+export interface RealChannelData {
+  id: string;
+  title: string;
+  stats: {
+    viewCount: string;
+    subscriberCount: string;
+    videoCount: string;
+  };
+  videos: {
+    id: string;
+    title: string;
+    thumbnail: string;
+    publishedAt: string;
+    stats: {
+      viewCount: string;
+      likeCount: string;
+      commentCount: string;
+    };
+    duration: string;
+  }[];
 }
 
 export type LoadingState = 'idle' | 'analyzing' | 'success' | 'error';

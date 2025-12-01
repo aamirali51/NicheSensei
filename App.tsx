@@ -281,7 +281,7 @@ function App() {
               )}
 
               {activeTab === 'strategy' && (
-                <StrategyPanel microNiches={data.microNiches || []} roadmap={data.contentRoadmap || []} />
+                <StrategyPanel microNiches={data.microNiches || []} roadmap={data.contentRoadmap || []} apiKey={apiKey} />
               )}
 
               {activeTab === 'competitors' && (

@@ -1,4 +1,11 @@
 
+export interface ThumbnailStrategy {
+  visualHook: string;
+  colorPsychology: string;
+  textAnalysis: string;
+  improvementSuggestion: string;
+}
+
 export interface Video {
   id: string;
   title: string;
@@ -12,6 +19,11 @@ export interface Video {
   zScore: number;
   viewsPerHour: number;
   performanceLabel: 'Outlier++' | 'Outlier+' | 'Standard' | 'Underperformer';
+  thumbnailStrategy?: ThumbnailStrategy;
+}
+
+export interface VideoAnalysisWithImage extends Video {
+  base64Thumbnail?: string;
 }
 
 export interface ChannelProfile {
@@ -137,6 +149,11 @@ export interface ChannelDrillDown {
       nodes: { id: string; label: string; type: 'Source' | 'Copy'; date: string }[];
       edges: { from: string; to: string; weight: number }[];
   };
+}
+
+export interface BeginnerExplanation {
+  cardTitle: string;
+  beginnerExplanation: string;
 }
 
 // --- REAL DATA TYPES ---

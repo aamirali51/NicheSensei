@@ -1,34 +1,37 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { AnalysisResult, DeepVideoReport, ChannelDrillDown, RealChannelData } from "../types";
+import { AnalysisResult, DeepVideoReport, ChannelDrillDown, RealChannelData, BeginnerExplanation, MicroNiche } from "../types";
 
 const initAI = (apiKey: string) => new GoogleGenAI({ apiKey });
+
+// Helper to convert URL to Base64
+async function urlToBase64(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64data = reader.result?.toString().split(',')[1];
+        resolve(base64data || null);
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.warn("Failed to fetch image for analysis:", url);
+    return null;
+  }
+}
 
 // --- MAIN ANALYSIS (Keyword / Broad Channel) ---
 export const analyzeNicheOrChannel = async (query: string, apiKey: string, realData?: RealChannelData): Promise<AnalysisResult> => {
   const ai = initAI(apiKey);
-
-  const systemInstruction = `
+  
+  let systemInstruction = `
     You are NicheSensei, the ultimate YouTube Research & Analytics Engine.
     Your mission is to perform deep, forensic-level analysis to help new faceless creators dominate their niche.
-    
-    ${realData ? `
-    CRITICAL INSTRUCTION:
-    You have been provided with REAL-TIME DATA fetched from the YouTube Data API for the channel "${realData.title}".
-    DATA CONTEXT:
-    - Subscribers: ${realData.stats.subscriberCount}
-    - Total Views: ${realData.stats.viewCount}
-    - Video Count: ${realData.stats.videoCount}
-    - Recent Videos: ${JSON.stringify(realData.videos.slice(0, 15).map(v => ({ title: v.title, views: v.stats.viewCount, date: v.publishedAt })))}
-
-    YOU MUST USE THIS REAL DATA AS GROUND TRUTH. 
-    - Do NOT hallucinate video stats. 
-    - Calculate Z-Scores based on the PROVIDED view counts.
-    - Base your "Channel Audit" on this actual performance.
-    ` : `
-    CRITICAL: YOU MUST PERFORM "FULL-SCALE" ANALYSIS. DO NOT LIMIT YOURSELF TO A SUBSET.
-    Since no real API data was provided, you must SIMULATE the most accurate data possible based on your training.
-    `}
     
     1. CHANNEL ANALYSIS (If query is a channel):
        - Calculate Z-Scores across the history.
@@ -55,6 +58,86 @@ export const analyzeNicheOrChannel = async (query: string, apiKey: string, realD
        - Detailed JSON.
        - No generic advice. Specific, data-backed insights only.
   `;
+
+  // Multimodal Payload Preparation
+  const contentParts: any[] = [];
+
+  if (realData) {
+    // 1. Local Statistics Calculation (to find top images)
+    const videos = realData.videos.map(v => ({
+      ...v,
+      views: parseInt(v.stats.viewCount) || 0
+    }));
+    
+    const viewCounts = videos.map(v => v.views);
+    const avgViews = viewCounts.reduce((a, b) => a + b, 0) / (viewCounts.length || 1);
+    const variance = viewCounts.reduce((a, b) => a + Math.pow(b - avgViews, 2), 0) / (viewCounts.length || 1);
+    const stdDev = Math.sqrt(variance) || 1;
+
+    // Rank videos by Z-Score (Influential Outliers)
+    const videosWithStats = videos.map(v => ({
+      ...v,
+      zScore: (v.views - avgViews) / stdDev
+    })).sort((a, b) => b.zScore - a.zScore); // Descending
+
+    // Take top 5 for deep visual analysis
+    const topVideos = videosWithStats.slice(0, 5);
+
+    // Fetch Images for Multimodal Analysis
+    const videoImages = await Promise.all(topVideos.map(async (v) => {
+      const base64 = await urlToBase64(v.thumbnail);
+      return { ...v, base64 };
+    }));
+
+    // Update System Instruction for Multimodal Analysis
+    systemInstruction += `
+    CRITICAL INSTRUCTION:
+    You have been provided with REAL-TIME DATA fetched from the YouTube Data API for the channel "${realData.title}".
+    
+    **MULTIMODAL THUMBNAIL ANALYSIS:**
+    You will receive specific thumbnail images for the channel's TOP PERFORMING videos.
+    For each image provided:
+    1. **Visual Analysis**: Analyze color palette (warm/cool), facial expressions (emotion), text overlay (font size, urgency), and complexity.
+    2. **Strategic Integration**: Explain WHY this specific visual combined with the title: "${topVideos[0]?.title}..." resulted in a high Click-Through Rate (CTR) and Z-Score.
+    3. **Output**: You MUST populate the 'thumbnailStrategy' field in the response for these videos.
+
+    YOU MUST USE THIS REAL DATA AS GROUND TRUTH. 
+    - Do NOT hallucinate video stats. 
+    - Calculate Z-Scores based on the PROVIDED view counts.
+    - Base your "Channel Audit" on this actual performance.
+    `;
+
+    // Construct the Content Parts
+    contentParts.push({ text: `Analyze the channel "${realData.title}" based on the following real-time data and visual evidence.` });
+    
+    for (const v of videoImages) {
+      if (v.base64) {
+        contentParts.push({ 
+          text: `[Visual Evidence] Video Title: "${v.title}" | Views: ${v.views.toLocaleString()} | Performance: Outlier (Z-Score: ${v.zScore.toFixed(2)}). Analyze this thumbnail:` 
+        });
+        contentParts.push({ 
+          inlineData: { mimeType: "image/jpeg", data: v.base64 } 
+        });
+      }
+    }
+    
+    contentParts.push({ 
+      text: `[Full Dataset] Here is the complete list of recent videos for statistical context: ${JSON.stringify(realData.videos.map(v => ({ 
+        title: v.title, 
+        views: v.stats.viewCount, 
+        date: v.publishedAt,
+        duration: v.duration
+      })))}` 
+    });
+
+  } else {
+    // Simulation Mode
+    systemInstruction += `
+    CRITICAL: YOU MUST PERFORM "FULL-SCALE" ANALYSIS. DO NOT LIMIT YOURSELF TO A SUBSET.
+    Since no real API data was provided, you must SIMULATE the most accurate data possible based on your training.
+    `;
+    contentParts.push({ text: `Analyze: "${query}". Identify Micro-Niche Clusters with >=70% Success Rate. Provide a clear "Why it works" and 10 Sample Ideas for each niche.` });
+  }
 
   const schema = {
     type: Type.OBJECT,
@@ -100,6 +183,15 @@ export const analyzeNicheOrChannel = async (query: string, apiKey: string, realD
             zScore: { type: Type.NUMBER },
             viewsPerHour: { type: Type.NUMBER },
             performanceLabel: { type: Type.STRING, enum: ["Outlier++", "Outlier+", "Standard", "Underperformer"] },
+            thumbnailStrategy: {
+               type: Type.OBJECT,
+               properties: {
+                 visualHook: { type: Type.STRING, description: "Key visual element that grabs attention (e.g., 'High contrast red arrow')." },
+                 colorPsychology: { type: Type.STRING, description: "Analysis of color usage and mood." },
+                 textAnalysis: { type: Type.STRING, description: "Analysis of text overlay font, size, and copy." },
+                 improvementSuggestion: { type: Type.STRING, description: "How to make it even better." }
+               }
+            }
           },
           required: ["title", "views", "zScore", "performanceLabel"],
         },
@@ -177,12 +269,10 @@ export const analyzeNicheOrChannel = async (query: string, apiKey: string, realD
     required: ["summary", "beginnerOpportunityScore", "successProbability", "channelProfile", "videos", "microNiches", "contentRoadmap", "competitors", "shadowAnalysis", "globalMonetization"],
   };
 
-  const prompt = `Analyze: "${query}". Identify Micro-Niche Clusters with >=70% Success Rate. Provide a clear "Why it works" and 10 Sample Ideas for each niche.`;
-
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: contentParts,
       config: { responseMimeType: "application/json", responseSchema: schema, systemInstruction, temperature: 0.7 },
     });
 
@@ -195,6 +285,52 @@ export const analyzeNicheOrChannel = async (query: string, apiKey: string, realD
     console.error("Gemini Analysis Failed:", error);
     throw error;
   }
+};
+
+// --- SENSEI EXPLAINER ---
+export const getBeginnerExplanation = async (niche: MicroNiche, apiKey: string): Promise<BeginnerExplanation> => {
+  const ai = initAI(apiKey);
+  
+  const systemInstruction = `
+    You are Sensei Explainer, an educational module for the NicheSensei application. 
+    Your sole purpose is to take complex, technical analysis results (like Z-Scores, Dominance Ratios, and NLP terms) and translate them into simple, clear, and actionable language suitable for a YouTube creator who is a beginner.
+
+    Persona: Adopt the tone of a friendly, knowledgeable mentor. Use clear analogies related to YouTube, sports, or everyday life.
+
+    Format: Output the final explanation in clean Markdown format with headings and bolding for immediate readability.
+  `;
+
+  const schema = {
+    type: Type.OBJECT,
+    properties: {
+      cardTitle: { type: Type.STRING },
+      beginnerExplanation: { type: Type.STRING },
+    },
+    required: ["cardTitle", "beginnerExplanation"],
+  };
+
+  const prompt = `
+    Explain this Micro-Niche Strategy to a beginner:
+    Niche: "${niche.name}"
+    Success Probability: ${niche.successProbability}%
+    Dominance Ratio: ${niche.dominanceRatio}
+    Competition Score: ${niche.competitionScore}
+    Why It Works: "${niche.whyItWorks}"
+    
+    Explain "Dominance Ratio" using the "King of the Niche" analogy.
+    Explain "Micro-Niche Clusters" using the "Secret Coordinates" / Vector Embeddings analogy.
+    Provide a concise Action Plan.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: { responseMimeType: "application/json", responseSchema: schema, systemInstruction, temperature: 0.7 },
+    });
+    
+    return JSON.parse(response.text || "{}") as BeginnerExplanation;
+  } catch(e) { console.error(e); throw e; }
 };
 
 // --- DEEP VIDEO FORENSICS ---

@@ -2,14 +2,34 @@
 import React, { useState } from 'react';
 import { MicroNiche, RoadmapItem } from '../types';
 import { IconTarget, IconDollar, IconVideo, IconChevronDown } from './Icons';
+import { getBeginnerExplanation } from '../services/geminiService';
 
 interface Props {
   microNiches: MicroNiche[];
   roadmap: RoadmapItem[];
+  apiKey: string;
 }
 
-const NicheCard = ({ niche }: { niche: MicroNiche }) => {
+const NicheCard: React.FC<{ niche: MicroNiche; apiKey: string }> = ({ niche, apiKey }) => {
   const [expanded, setExpanded] = useState(false);
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [explaining, setExplaining] = useState(false);
+
+  const handleExplain = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering parent clicks if any
+    if (explanation) return; // Already loaded
+    if (!apiKey) return;
+
+    setExplaining(true);
+    try {
+      const result = await getBeginnerExplanation(niche, apiKey);
+      setExplanation(result.beginnerExplanation);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setExplaining(false);
+    }
+  };
 
   return (
     <div className="bg-slate-800 p-5 rounded-xl border border-slate-700 hover:border-purple-500/50 transition-colors">
@@ -80,14 +100,33 @@ const NicheCard = ({ niche }: { niche: MicroNiche }) => {
         </div>
       </div>
 
-      {/* Expandable Ideas */}
-      <button 
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-center gap-2 py-2 bg-slate-700/30 hover:bg-slate-700/50 rounded-lg text-xs font-bold text-slate-400 transition-colors"
-      >
-        {expanded ? 'Hide Video Ideas' : `View 10 Sample Ideas`}
-        <IconChevronDown className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-      </button>
+      {/* Explanation Box */}
+      {explanation && (
+        <div className="bg-purple-900/20 border border-purple-500/30 p-4 rounded-lg mb-3 animate-fade-in">
+           <div className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap text-xs text-slate-200">
+             {explanation}
+           </div>
+        </div>
+      )}
+
+      {/* Buttons */}
+      <div className="flex gap-2">
+        <button 
+          onClick={handleExplain}
+          disabled={explaining || !!explanation || !apiKey}
+          className="flex-1 py-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 rounded-lg text-xs font-bold transition-colors border border-purple-500/30 disabled:opacity-50"
+        >
+          {explaining ? 'Asking Sensei...' : explanation ? 'Strategy Explained' : 'Explain Strategy (Beginner Mode)'}
+        </button>
+
+        <button 
+          onClick={() => setExpanded(!expanded)}
+          className="flex-1 flex items-center justify-center gap-2 py-2 bg-slate-700/30 hover:bg-slate-700/50 rounded-lg text-xs font-bold text-slate-400 transition-colors"
+        >
+          {expanded ? 'Hide Video Ideas' : `View 10 Sample Ideas`}
+          <IconChevronDown className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
 
       {expanded && (
         <div className="mt-3 space-y-1 animate-slide-in">
@@ -103,7 +142,7 @@ const NicheCard = ({ niche }: { niche: MicroNiche }) => {
   );
 };
 
-export const StrategyPanel: React.FC<Props> = ({ microNiches, roadmap }) => {
+export const StrategyPanel: React.FC<Props> = ({ microNiches, roadmap, apiKey }) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       
@@ -115,7 +154,7 @@ export const StrategyPanel: React.FC<Props> = ({ microNiches, roadmap }) => {
         </h3>
         <div className="space-y-3">
           {microNiches.map((niche, idx) => (
-            <NicheCard key={idx} niche={niche} />
+            <NicheCard key={idx} niche={niche} apiKey={apiKey} />
           ))}
           {microNiches.length === 0 && <p className="text-slate-500 italic">No specific niches detected.</p>}
         </div>

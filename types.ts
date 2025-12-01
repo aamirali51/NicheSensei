@@ -1,4 +1,5 @@
 
+
 export interface ThumbnailStrategy {
   visualHook: string;
   colorPsychology: string;
@@ -177,6 +178,20 @@ export interface RealChannelData {
     };
     duration: string;
   }[];
+}
+
+export interface MasterBackupObject {
+  version: string;
+  timestamp: string;
+  config: {
+    apiKey?: string;
+    youtubeApiKey?: string;
+  };
+  lastAnalysis?: AnalysisResult | null;
+  // Placeholder for future state like tracked niches history
+  meta?: {
+    appVersion: string;
+  };
 }
 
 export type LoadingState = 'idle' | 'analyzing' | 'success' | 'error';

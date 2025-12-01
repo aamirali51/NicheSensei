@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { analyzeNicheOrChannel, analyzeVideoDeepDive, analyzeChannelDeepDive } from './services/geminiService';
 import { getChannelIdFromUrl, fetchRealChannelData } from './services/youtubeService';
+import { exportAppState, importAppState } from './services/storageService';
 import { AnalysisResult, LoadingState, DeepVideoReport, ChannelDrillDown, RealChannelData } from './types';
 import { VideoAnalysis } from './components/VideoAnalysis';
 import { StrategyPanel } from './components/StrategyPanel';
@@ -24,6 +25,9 @@ function App() {
   const [videoReport, setVideoReport] = useState<DeepVideoReport | null>(null);
   const [channelDeepDive, setChannelDeepDive] = useState<ChannelDrillDown | null>(null);
   const [deepDiveLoading, setDeepDiveLoading] = useState(false);
+
+  // File Input Ref for Import
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-load API Key if available in env (for dev)
   useEffect(() => {
@@ -94,6 +98,38 @@ function App() {
      } finally {
        setDeepDiveLoading(false);
      }
+  };
+
+  // Backup & Restore Handlers
+  const handleExportBackup = () => {
+    exportAppState({
+      config: { apiKey, youtubeApiKey },
+      lastAnalysis: data
+    });
+  };
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const backup = await importAppState(file);
+      
+      if (backup.config?.apiKey) setApiKey(backup.config.apiKey);
+      if (backup.config?.youtubeApiKey) setYoutubeApiKey(backup.config.youtubeApiKey);
+      if (backup.lastAnalysis) {
+        setData(backup.lastAnalysis);
+        setStatus('success');
+      }
+      
+      alert(`Restore successful! Loaded backup from ${new Date(backup.timestamp).toLocaleDateString()}`);
+      setShowSettings(false);
+    } catch (err: any) {
+      alert(`Restore failed: ${err.message}`);
+    } finally {
+      // Reset input value so same file can be selected again if needed
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const ExampleQueries = ["True Crime Faceless", "AI News", "Stoicism", "Finance Automation"];
@@ -369,7 +405,7 @@ function App() {
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-full max-w-md shadow-2xl">
+          <div className="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
             <h2 className="text-2xl font-bold text-white mb-2">Configuration</h2>
             <p className="text-slate-400 mb-6 text-sm">To enable NicheSensei's analysis engine, please provide your API Keys.</p>
             
@@ -396,6 +432,31 @@ function App() {
                   placeholder="AIzaSy..."
                 />
               </div>
+            </div>
+
+            {/* Backup & Restore Section */}
+            <div className="mb-6 pt-4 border-t border-slate-800">
+               <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Backup & Restore</label>
+               <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={handleExportBackup}
+                    className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold py-2 rounded-lg border border-slate-700 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Export Config
+                  </button>
+                  <label className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold py-2 rounded-lg border border-slate-700 transition-colors cursor-pointer">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                    Import Backup
+                    <input 
+                      type="file" 
+                      ref={fileInputRef}
+                      className="hidden" 
+                      accept=".json"
+                      onChange={handleImportBackup}
+                    />
+                  </label>
+               </div>
             </div>
             
             <div className="flex gap-4">

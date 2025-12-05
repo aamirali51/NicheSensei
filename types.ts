@@ -1,5 +1,4 @@
 
-
 export interface ThumbnailStrategy {
   visualHook: string;
   colorPsychology: string;
@@ -49,6 +48,13 @@ export interface MicroNiche {
   whyItWorks: string;
   sampleIdeas: string[]; // List of 10 video titles/concepts
   keywords: string[];
+}
+
+export interface TrackedNiche extends MicroNiche {
+  id: string;
+  createdAt: string;
+  notes?: string;
+  competitorIds?: string[];
 }
 
 export interface Competitor {
@@ -188,10 +194,71 @@ export interface MasterBackupObject {
     youtubeApiKey?: string;
   };
   lastAnalysis?: AnalysisResult | null;
-  // Placeholder for future state like tracked niches history
+  trackedNiches?: TrackedNiche[];
   meta?: {
     appVersion: string;
   };
+}
+
+// --- CHANNEL INVESTIGATION TYPES ---
+
+export interface ForensicMetric {
+  copyRiskScore: number; // 0-100 (High means they copy others)
+  originalityScore: number; // 0-100
+  reusedContentRisk: 'Low' | 'Medium' | 'High';
+  aiContentDetected: boolean;
+  notes: string;
+}
+
+export interface ChannelCompetitor {
+  name: string;
+  similarityTheme: string;
+  subscriberCount: string;
+  overlapPercentage: number;
+}
+
+export interface GrowthPrediction {
+  oneMonthProjection: string;
+  threeMonthProjection: string;
+  potentialPitfalls: string[];
+  uniqueAngles: string[];
+}
+
+export interface VideoTopicInfo {
+  videoId: string;
+  title: string;
+  topic: string; // e.g., "Motivation", "Gaming"
+  predictedCTR: string; // "High", "Medium"
+  titleSeoScore: number; // 0-100
+}
+
+export interface ChannelInvestigationReport {
+  isSimulation?: boolean; // New Flag
+  channelInfo: {
+    title: string;
+    id: string;
+    description: string;
+    subscriberCount: string;
+    totalViews: string;
+    videoCount: string;
+    creationDate: string; // approximate or real
+    detectedNiche: string;
+    country?: string;
+    avgUploadFrequency: string;
+  };
+  contentMix: {
+    shortsPct: number;
+    longFormPct: number;
+  };
+  forensics: ForensicMetric;
+  competitors: ChannelCompetitor[];
+  growthPrediction: GrowthPrediction;
+  recentVideosAnalysis: VideoTopicInfo[];
+  visualAnalytics: {
+    viewsHistory: { date: string; views: number }[]; // For line chart
+    topKeywords: { text: string; value: number }[]; // For word cloud
+  };
+  successProbabilityForNewCreator: number; // 0-100
 }
 
 export type LoadingState = 'idle' | 'analyzing' | 'success' | 'error';

@@ -1,24 +1,30 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
-import { analyzeNicheOrChannel, analyzeVideoDeepDive, analyzeChannelDeepDive } from './services/geminiService';
+import { analyzeNicheOrChannel, analyzeVideoDeepDive, analyzeChannelDeepDive, performChannelInvestigation } from './services/geminiService';
 import { getChannelIdFromUrl, fetchRealChannelData } from './services/youtubeService';
 import { exportAppState, importAppState } from './services/storageService';
-import { AnalysisResult, LoadingState, DeepVideoReport, ChannelDrillDown, RealChannelData } from './types';
+import { AnalysisResult, LoadingState, DeepVideoReport, ChannelDrillDown, RealChannelData, ChannelInvestigationReport } from './types';
 import { VideoAnalysis } from './components/VideoAnalysis';
 import { StrategyPanel } from './components/StrategyPanel';
 import { ForensicsModal } from './components/ForensicsModal';
 import { ChannelDrillDownPanel } from './components/ChannelDrillDown';
+import { ChannelInvestigation } from './components/ChannelInvestigation';
 import { LoadingOverlay } from './components/LoadingOverlay';
-import { IconSearch, IconTrendingUp, IconUsers, IconSettings } from './components/Icons';
+import { IconSearch, IconTrendingUp, IconUsers, IconSettings, IconTarget } from './components/Icons';
 
 function App() {
   const [query, setQuery] = useState('');
   const [data, setData] = useState<AnalysisResult | null>(null);
+  const [investigationData, setInvestigationData] = useState<ChannelInvestigationReport | null>(null);
   const [status, setStatus] = useState<LoadingState>('idle');
   const [loadingType, setLoadingType] = useState<'general' | 'video' | 'channel'>('general');
   const [apiKey, setApiKey] = useState('');
   const [youtubeApiKey, setYoutubeApiKey] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  
+  // Navigation
+  const [appMode, setAppMode] = useState<'strategy' | 'investigation'>('strategy');
   const [activeTab, setActiveTab] = useState<'overview' | 'competitors' | 'strategy'>('overview');
   
   // Advanced State
@@ -29,17 +35,29 @@ function App() {
   // File Input Ref for Import
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-load API Key if available in env (for dev)
+  // Auto-load API Key from Storage or Env
   useEffect(() => {
-    if (process.env.API_KEY) {
+    const storedGeminiKey = localStorage.getItem('nicheSensei_geminiKey');
+    const storedYtKey = localStorage.getItem('nicheSensei_ytKey');
+
+    if (storedGeminiKey) {
+      setApiKey(storedGeminiKey);
+    } else if (process.env.API_KEY) {
       setApiKey(process.env.API_KEY);
     }
-    // Note: Usually we don't put YouTube keys in process.env for client-side demo unless explicit
+
+    if (storedYtKey) {
+      setYoutubeApiKey(storedYtKey);
+    } else if (process.env.YOUTUBE_API_KEY) {
+        setYoutubeApiKey(process.env.YOUTUBE_API_KEY);
+    }
   }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
+    
+    // Prompt for Keys if missing
     if (!apiKey) {
       setShowSettings(true);
       return;
@@ -47,24 +65,42 @@ function App() {
 
     setStatus('analyzing');
     setData(null);
+    setInvestigationData(null);
     setVideoReport(null);
     setChannelDeepDive(null);
 
     // Determine loading type based on query
     const isVideoUrl = query.includes('youtube.com/watch') || query.includes('youtu.be');
-    setLoadingType(isVideoUrl ? 'video' : 'general');
+    
+    if (appMode === 'investigation') {
+        setLoadingType('channel');
+    } else {
+        setLoadingType(isVideoUrl ? 'video' : 'general');
+    }
 
     try {
-      if (isVideoUrl) {
+      if (appMode === 'investigation') {
+         // CHANNEL INVESTIGATION MODE
+         let realChannelData: RealChannelData | undefined;
+         if (youtubeApiKey) {
+             try {
+                const channelId = await getChannelIdFromUrl(query, youtubeApiKey);
+                if (channelId) realChannelData = await fetchRealChannelData(channelId, youtubeApiKey);
+             } catch (err) { console.warn('YouTube API failed, simulating', err); }
+         }
+         const report = await performChannelInvestigation(query, apiKey, realChannelData);
+         setInvestigationData(report);
+         setStatus('success');
+
+      } else if (isVideoUrl) {
+        // VIDEO FORENSICS MODE
         const report = await analyzeVideoDeepDive(query, apiKey);
         setVideoReport(report);
         setStatus('success');
       } else {
-        // HYBRID SEARCH LOGIC
+        // STRATEGY / HYBRID SEARCH MODE
         let realChannelData: RealChannelData | undefined;
 
-        // Try to fetch REAL data if Youtube API Key is present AND it looks like a channel/user query
-        // (Not applicable for generic niche keywords like "finance")
         if (youtubeApiKey && (query.includes('youtube.com') || query.startsWith('@') || query.length > 20)) {
            try {
              const channelId = await getChannelIdFromUrl(query, youtubeApiKey);
@@ -73,7 +109,6 @@ function App() {
              }
            } catch (ytError) {
              console.warn("YouTube API Fetch failed, falling back to simulation:", ytError);
-             // We don't block the app, we just fall back to AI simulation
            }
         }
 
@@ -88,7 +123,10 @@ function App() {
   };
 
   const handleChannelClick = async (channelName: string) => {
-     if (!apiKey) return;
+     if (!apiKey) {
+       setShowSettings(true);
+       return;
+     }
      setDeepDiveLoading(true);
      try {
        const result = await analyzeChannelDeepDive(channelName, apiKey);
@@ -115,8 +153,15 @@ function App() {
     try {
       const backup = await importAppState(file);
       
-      if (backup.config?.apiKey) setApiKey(backup.config.apiKey);
-      if (backup.config?.youtubeApiKey) setYoutubeApiKey(backup.config.youtubeApiKey);
+      if (backup.config?.apiKey) {
+        setApiKey(backup.config.apiKey);
+        localStorage.setItem('nicheSensei_geminiKey', backup.config.apiKey);
+      }
+      if (backup.config?.youtubeApiKey) {
+        setYoutubeApiKey(backup.config.youtubeApiKey);
+        localStorage.setItem('nicheSensei_ytKey', backup.config.youtubeApiKey);
+      }
+      
       if (backup.lastAnalysis) {
         setData(backup.lastAnalysis);
         setStatus('success');
@@ -132,6 +177,33 @@ function App() {
     }
   };
 
+  const handleDownloadEnv = () => {
+    const content = `API_KEY=${apiKey}\nYOUTUBE_API_KEY=${youtubeApiKey}`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '.env';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const saveKeys = () => {
+    if (apiKey) {
+      localStorage.setItem('nicheSensei_geminiKey', apiKey);
+      
+      if (youtubeApiKey) {
+        localStorage.setItem('nicheSensei_ytKey', youtubeApiKey);
+      } else {
+        localStorage.removeItem('nicheSensei_ytKey');
+      }
+      
+      setShowSettings(false);
+    }
+  };
+
   const ExampleQueries = ["True Crime Faceless", "AI News", "Stoicism", "Finance Automation"];
 
   return (
@@ -139,12 +211,28 @@ function App() {
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2" onClick={() => { setData(null); setVideoReport(null); setQuery(''); }} style={{cursor: 'pointer'}}>
+          <div className="flex items-center gap-2" onClick={() => { setData(null); setVideoReport(null); setInvestigationData(null); setQuery(''); }} style={{cursor: 'pointer'}}>
             <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-purple-500/20">
               N
             </div>
             <span className="font-bold text-xl tracking-tight text-white">Niche<span className="text-purple-400">Sensei</span></span>
           </div>
+
+          <nav className="hidden md:flex items-center bg-slate-800/50 rounded-full p-1 border border-slate-700/50">
+             <button 
+                onClick={() => setAppMode('strategy')}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${appMode === 'strategy' ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20' : 'text-slate-400 hover:text-white'}`}
+             >
+                Growth Strategy
+             </button>
+             <button 
+                onClick={() => setAppMode('investigation')}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${appMode === 'investigation' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:text-white'}`}
+             >
+                Channel Investigation
+             </button>
+          </nav>
+
           <button 
             onClick={() => setShowSettings(true)}
             className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
@@ -159,27 +247,34 @@ function App() {
         {/* Search Section */}
         <div className="max-w-2xl mx-auto mb-12 text-center">
           <h1 className="text-3xl md:text-5xl font-bold text-white mb-6">
-            Master the Algorithm with <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">NicheSensei</span>
+             {appMode === 'strategy' ? (
+                <>Master the Algorithm with <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">NicheSensei</span></>
+             ) : (
+                <>Forensic Channel <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">Investigation</span></>
+             )}
           </h1>
           <p className="text-slate-400 mb-8 text-lg">
-            The AI engine for deep forensic analysis, competitor mapping, and high-probability niche discovery.
+            {appMode === 'strategy' 
+               ? "The AI engine for deep forensic analysis, competitor mapping, and high-probability niche discovery."
+               : "Analyze channel authenticity, detect copycats, and predict growth potential with forensic accuracy."
+            }
           </p>
 
           <form onSubmit={handleSearch} className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-blue-600 rounded-full blur opacity-25 group-hover:opacity-50 transition-opacity"></div>
+            <div className={`absolute inset-0 bg-gradient-to-r rounded-full blur opacity-25 group-hover:opacity-50 transition-opacity ${appMode === 'strategy' ? 'from-purple-500 to-blue-600' : 'from-blue-500 to-cyan-500'}`}></div>
             <div className="relative flex items-center bg-slate-900 border border-slate-700 rounded-full p-2 shadow-2xl">
               <IconSearch className="w-6 h-6 text-slate-500 ml-3" />
               <input 
                 type="text" 
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Paste Channel, Video, or Niche..."
+                placeholder={appMode === 'strategy' ? "Paste Channel, Video, or Niche..." : "Paste Channel URL or Name..."}
                 className="bg-transparent border-none outline-none flex-1 px-4 py-3 text-white placeholder-slate-500"
               />
               <button 
                 type="submit"
                 disabled={status === 'analyzing'}
-                className="bg-white text-slate-900 px-6 py-3 rounded-full font-bold hover:bg-slate-200 transition-colors disabled:opacity-50"
+                className={`text-slate-900 px-6 py-3 rounded-full font-bold hover:bg-slate-200 transition-colors disabled:opacity-50 ${appMode === 'strategy' ? 'bg-white' : 'bg-cyan-50'}`}
               >
                 {status === 'analyzing' ? 'Scanning...' : 'Analyze'}
               </button>
@@ -214,8 +309,14 @@ function App() {
           </div>
         )}
 
-        {/* MAIN DASHBOARD */}
-        {status === 'success' && data && !videoReport && (
+        {/* --- CHANNEL INVESTIGATION PAGE --- */}
+        {status === 'success' && investigationData && (
+           <ChannelInvestigation data={investigationData} />
+        )}
+
+
+        {/* --- MAIN STRATEGY DASHBOARD --- */}
+        {status === 'success' && data && !videoReport && !investigationData && (
           <div className="animate-fade-in space-y-8">
             
             {/* Summary & High-Level Scores */}
@@ -437,7 +538,7 @@ function App() {
             {/* Backup & Restore Section */}
             <div className="mb-6 pt-4 border-t border-slate-800">
                <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Backup & Restore</label>
-               <div className="grid grid-cols-2 gap-3">
+               <div className="grid grid-cols-2 gap-3 mb-3">
                   <button
                     onClick={handleExportBackup}
                     className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold py-2 rounded-lg border border-slate-700 transition-colors"
@@ -457,6 +558,13 @@ function App() {
                     />
                   </label>
                </div>
+               
+               <button
+                  onClick={handleDownloadEnv}
+                  className="w-full flex items-center justify-center gap-2 bg-slate-900/50 hover:bg-slate-800 text-purple-400 hover:text-purple-300 text-xs font-bold py-2 rounded-lg border border-dashed border-purple-500/30 transition-colors"
+                >
+                  Download .env file for Dev
+               </button>
             </div>
             
             <div className="flex gap-4">
@@ -467,9 +575,7 @@ function App() {
                 Cancel
               </button>
               <button 
-                onClick={() => {
-                   if(apiKey) setShowSettings(false);
-                }}
+                onClick={saveKeys}
                 className="flex-1 bg-purple-600 text-white font-bold py-3 rounded-lg hover:bg-purple-500 transition-colors disabled:opacity-50"
                 disabled={!apiKey}
               >
